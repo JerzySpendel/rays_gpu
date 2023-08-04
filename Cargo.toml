@@ -1,0 +1,16 @@
+[package]
+name = "gpu"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wgpu = "0.16.2"
+image = "0.24.6"
+tokio = {version = "1", features = ["full"]}
+bytemuck = "1.13.1"
+futures-intrusive = "0.5.0"
+nalgebra = "*"
+ultraviolet = { version = "0.9", features = [ "f64", "int", "bytemuck" ] }
+rand = "0.8.5"
