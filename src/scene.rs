@@ -1,8 +1,8 @@
 
-use std::{sync::Arc, ops::Sub};
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use ultraviolet::{Vec2, Vec3};
+use ultraviolet::Vec3;
 use wgpu::util::DeviceExt;
 use crate::ray::Ray;
 
@@ -26,7 +26,6 @@ pub struct Scene {
     screen_width: u32,
     screen_height: u32,
     eye: Vec3,
-
 }
 
 pub struct SceneIterator<'a> {
@@ -135,5 +134,27 @@ impl<'a> Iterator for SceneIterator<'a> {
         }
         Some(rays)
 
+    }
+}
+
+struct SceneChunk(Vec<Ray>);
+
+impl SceneChunk {
+    pub fn get_dimensions(&self) -> (u32, u32) {
+        let 
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scene_iterator() {
+        let scene = Scene { lu: Default::default(), width: 1., height: 1., screen_width: 10, screen_height: 10, eye: Default::default() };
+        let iterator = SceneIterator::new(&scene, 10);
+
+        assert_eq!(iterator.into_iter().collect::<Vec<_>>().len(), 10);
     }
 }
