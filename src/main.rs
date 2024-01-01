@@ -11,7 +11,7 @@ use tokio;
 use bytemuck;
 use wgpu::util::DeviceExt;
 use ray::Ray;
-use scene::{Scene, SceneIterator};
+use scene::{Scene, SceneIterator, SceneChunk};
 
 use std::sync::Arc;
 
@@ -49,8 +49,8 @@ async fn main() -> Result<(), String> {
     }));
 
     let scene = Arc::new(Scene::default());
-    let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(10);
-    let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(10);
+    let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
+    let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
     tokio::spawn(pixel_sender(pixels_stream_sender, scene.clone()));
     tokio::spawn(compute_pixels(pixels_stream_receiver, ray_sender, device.clone(), compute_pipeline.clone(), queue.clone(), scene.clone()));
 
@@ -58,37 +58,38 @@ async fn main() -> Result<(), String> {
     Ok(())
 }
 
-async fn pixel_sender(pixel_stream: tokio::sync::mpsc::Sender<Vec<Ray>>, scene: Arc<Scene>){
-    for chunk in SceneIterator::new(&scene, 50000) {
+async fn pixel_sender(pixel_stream: tokio::sync::mpsc::Sender<SceneChunk>, scene: Arc<Scene>) {
+    for chunk in SceneIterator::new(&scene, 250000).unwrap() {
         pixel_stream.send(chunk).await;
     }
 
 }
 
 async fn compute_pixels(
-    mut pixel_stream: tokio::sync::mpsc::Receiver<Vec<Ray>>,
+    mut pixel_stream: tokio::sync::mpsc::Receiver<SceneChunk>,
     pixels_stream_out: tokio::sync::mpsc::Sender<Vec<Ray>>,
     device: Arc<wgpu::Device>,
     cp: Arc<ComputePipeline>,
     queue: Arc<wgpu::Queue>,
     scene: Arc<Scene> ) {
-    while let Some(pixel) = pixel_stream.recv().await {
+    while let Some(chunk) = pixel_stream.recv().await {
         let scene = scene.clone();
         let t = std::time::Instant::now();
         let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Staging buffer"),
-            size: (std::mem::size_of::<Ray>() * pixel.len()) as wgpu::BufferAddress,
+            size: (std::mem::size_of::<Ray>() * chunk.len()) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         let storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Storage buffer"),
-            contents: bytemuck::cast_slice(&pixel),
+            contents: bytemuck::cast_slice(chunk.as_ref()),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC
         });
 
-        let balls_buffer = scene.get_balls_bg(cp.clone(), device.clone());
+        let balls_buffer = scene.clone().get_balls_bg(cp.clone(), device.clone());
+        let triangles_buffer = scene.get_triangles_bg(cp.clone(), device.clone());
         let bind_group_layout: wgpu::BindGroupLayout = cp.get_bind_group_layout(0);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -102,10 +103,14 @@ async fn compute_pixels(
                     binding: 1,
                     resource: balls_buffer.as_entire_binding(),
                 }]
-        });
+                // wgpu::BindGroupEntry {
+                //     binding: 2,
+                //     resource: triangles_buffer.as_entire_binding(),
+                // }]
+    });
 
-        let texture_side_size = (pixel.len() as f32).sqrt().ceil() as u32;
-        let noise_bg = prepare_random_texture(device.clone(), queue.clone(), (texture_side_size, texture_side_size));
+        let chunk_size = chunk.get_dimensions();
+        let noise_bg = prepare_random_texture(device.clone(), queue.clone(), chunk_size);
 
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -113,10 +118,10 @@ async fn compute_pixels(
         cpass.set_pipeline(&cp);
         cpass.set_bind_group(0, &bind_group, &[]);
         cpass.set_bind_group(1, &noise_bg, &[]);
-        cpass.dispatch_workgroups(pixel.len() as u32, 1, 1);
+        cpass.dispatch_workgroups(chunk_size.0, chunk_size.1, 1);
         drop(cpass);
 
-        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, (std::mem::size_of::<Ray>() * pixel.len()) as wgpu::BufferAddress);
+        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, (std::mem::size_of::<Ray>() * chunk.len()) as wgpu::BufferAddress);
         queue.submit(Some(encoder.finish()));
 
         let (sender, receiver) = tokio::sync::oneshot::channel();

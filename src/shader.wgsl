@@ -9,6 +9,13 @@ struct Ray {
 struct Ball {
     center: vec3<f32>,
     radius: f32,
+    material: u32,
+}
+
+struct Triangle {
+    v0: vec3<f32>,
+    v1: vec3<f32>,
+    v2: vec3<f32>,
 }
 
 
@@ -20,15 +27,16 @@ var<storage, read_write> v_indices: array<Ray>; // this is used as both input an
 @binding(1)
 var<storage> balls: array<Ball>;
 
+
+// @group(0)
+// @binding(2)
+// var<storage> triangles: array<Triangle>;
+
 @group(1) @binding(0)
 var noise_texture: texture_2d<f32>;
 
 
 fn pcg(v: u32) -> u32 {
-//   let state: u32 = v * 747796405u + 2891336453u;
-//   let word: u32 = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-//   return (word >> 22u) ^ word;
-
     var seed = (v ^ 61u) ^ (v >> 16u);
     seed *= 9u;
     seed = seed ^ (seed >> 4u);
@@ -40,6 +48,51 @@ fn pcg(v: u32) -> u32 {
 fn prng (p: f32) -> f32 {
   return f32(pcg(u32(p))) / f32(0xffffffffu);
 }
+
+// fn triangle_hit(ray: Ray, triangle_id: u32) -> f32 {
+//     let kEpsilon = 0.0001;
+//     let triangle: Triangle = triangles[triangle_id];
+//     let v0v1 = triangle.v1 - triangle.v0;
+//     let v0v2 = triangle.v2 - triangle.v0;
+//     let N = cross(v0v1, v0v2);
+//     let area2 = length(N);
+
+//     if abs(dot(N, ray.dir)) < kEpsilon {
+//         return -1.0;
+//     }
+
+//     let d = -dot(N, triangle.v0);
+//     let t = -(dot(N, ray.orig) + d)/ dot(N, ray.dir);
+
+//     if t < 0.0 {
+//         return -1.0;
+//     }
+
+//     let P = ray.orig + ray.dir * t;
+
+//     let edge0 = triangle.v1 - triangle.v0;
+//     let vp0 = P - triangle.v0;
+//     var C: vec3<f32> = cross(edge0, vp0);
+//     if dot(N, C) < 0.0 {
+//         return -1.0;
+//     }
+
+//     let edge1 = triangle.v2 - triangle.v1;
+//     let vp1 = P - triangle.v1;
+//     C = cross(edge1, vp1);
+//     if dot(N, C) < 0.0 {
+//         return -1.0;
+//     }
+
+//     let edge2 = triangle.v0 - triangle.v2;
+//     let vp2 = P - triangle.v2;
+//     C = cross(edge2, vp2);
+//     if dot(N, C) < 0.0 {
+//         return -1.0;
+//     }
+
+//     return t;
+// }
 
 fn has_hit(ray: Ray) -> vec2<f32> {
     let init_max_t = f32(1000000000);
@@ -78,24 +131,33 @@ fn has_hit(ray: Ray) -> vec2<f32> {
     }
 }
 
-fn random_vec3(seed: f32) -> vec3<f32> {
+fn random_vec3(seed: f32, N: vec3<f32>) -> vec3<f32> {
     var unit: vec3<f32>;
+    var seed = seed;
     loop { 
         unit = vec3<f32>(prng(seed), prng(seed + 1.), prng(seed + 2.));
         if dot(unit, unit) >= 1. {
+            seed += 3.0;
             continue;
         }
         else {
             break;
         }
     }
-    return unit;
+    
+    let random_vector = normalize(unit + N / 2.0);
+    if dot(random_vector, N) > 0.0 {
+        return random_vector;
+    }
+    else {
+        return -random_vector;
+    }
 }
 
 
 fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
     var output_color: vec3<f32> = vec3<f32>(1.);
-    var depth: i32 = 5;
+    var depth: i32 = 15;
 
     var current_ray = ray;
     while depth > 0 {
@@ -108,7 +170,15 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
             let hit_point = current_ray.orig + current_ray.dir * t;
             let N = normalize(hit_point - ball.center);
 
-            let new_target = normalize(hit_point + N + random_vec3(seed.x));
+            var new_target: vec3<f32>;
+            if ball.material == 0u {
+                new_target = normalize(hit_point + N + random_vec3(seed.x, N));
+            }
+            else {
+                let N_offset = normalize(50.0 * N + random_vec3(seed.x, N));
+                // let N_offset = N;
+                new_target = current_ray.dir - 2.0*dot(N_offset, current_ray.dir) * N_offset;
+            }
             var new_ray: Ray;
             new_ray.screen_x = ray.screen_x;
             new_ray.screen_y = ray.screen_y;
@@ -135,26 +205,15 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
 
 @compute
 @workgroup_size(1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
+        @builtin(num_workgroups) workgroups: vec3<u32>) {
+    let ray_index = global_id.x + global_id.y * workgroups.x;
     let texture_size: vec2<u32> = textureDimensions(noise_texture);
     let noise_y: u32 = u32(floor(f32(global_id.x) / f32(texture_size.x)));
     let noise_x: u32 = global_id.x - noise_y * texture_size.x;
 
-    let seed: vec4<f32> = textureLoad(noise_texture, vec2<u32>(noise_x, noise_y), 0)*100000f;
-    let ray: Ray = v_indices[global_id.x];
+    let seed: vec4<f32> = textureLoad(noise_texture, vec2<u32>(global_id.x, global_id.y), 0)*100000f;
+    let ray: Ray = v_indices[ray_index];
 
-    // for (var i: i32 = 0; i < i32(arrayLength(&balls)); i++){
-    //     let ball = balls[i];
-    //     let t = has_hit(ball.center, ball.radius, ray);
-
-    //     if t > 0.0 {
-    //         let hit_point = ray.orig + ray.dir * t;
-    //         let N = normalize(0.5 * (hit_point - ball.center + 1.0));
-    //         v_indices[global_id.x].color = N;
-    //         return;
-    //         // v_indices[global_id.x].color = vec3<f32>(ball_radius, ball_radius, ball_radius);
-    //     }
-
-    // }
-    v_indices[global_id.x].color = ray_color(ray, seed);
+    v_indices[ray_index].color = ray_color(ray, seed);
 }

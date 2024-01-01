@@ -4,7 +4,7 @@ use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
 use ultraviolet::Vec3;
 use wgpu::util::DeviceExt;
-use crate::ray::Ray;
+use crate::{ray::Ray, utils::Triangle};
 
 
 #[repr(C)]
@@ -12,6 +12,8 @@ use crate::ray::Ray;
 pub struct Ball {
     pub center: Vec3,
     pub radius: f32,
+    pub material: u32,
+    _padding: [u32; 3],
 }
 
 
@@ -41,8 +43,8 @@ impl Default for Scene {
             lu: Vec3::new(-2f32, 2f32, -1f32),
             width: 4f32,
             height: 4f32,
-            screen_width: 20000,
-            screen_height: 20000,
+            screen_width: 5000,
+            screen_height: 5000,
             eye: Vec3::new(0f32, 0f32, 0f32)
         }
     }
@@ -74,13 +76,17 @@ impl Scene {
 
     pub fn get_balls_bg(self: Arc<Self>, cp: Arc<wgpu::ComputePipeline>, device: Arc<wgpu::Device>) -> wgpu::Buffer {
         let ball = Ball {
-            center: Vec3::new(0.0, 0.0, -1.0),
-            radius: 0.5
+            center: Vec3::new(-0.7, 0.0, -1.5),
+            radius: 0.5,
+            material: 1,
+            _padding: Default::default(),
         };
         let balls = vec![Ball {
             center: Vec3::new(0.0, -100.5, -1.0),
-            radius: 100.0
-        }, ball];
+            radius: 100.0,
+            material: 0,
+            _padding: Default::default(),
+        }, Ball { center: Vec3::new(0.5, 0.0, -0.7) , radius: 0.5, material: 1, _padding: Default::default()}, ball];
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Ball's buffer"),
@@ -91,20 +97,43 @@ impl Scene {
         buffer
 
     }
+
+    pub fn get_triangles_bg(self: Arc<Self>, cp: Arc<wgpu::ComputePipeline>, device: Arc<wgpu::Device>) -> wgpu::Buffer {
+        let triangle = Triangle::new(
+            Vec3::new(0.5, 0.5, -1.0),
+            Vec3::new(0.25, 0.25, -1.0),
+            Vec3::new(0.75, 0.25, -1.0),
+        );
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Buffer with triangles"),
+            contents: bytemuck::cast_slice(&[triangle]),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        buffer
+    }
 }
 
 
 impl<'a> SceneIterator<'a> {
-    pub fn new(scene: &'a Scene, size: usize) -> Self {
-        SceneIterator {
-            scene, size,
-            stopped: 0,
+    pub fn new(scene: &'a Scene, size: usize) -> Result<Self, String> {
+        let sqrt = (size as f32).sqrt();
+
+        if (sqrt - sqrt.round()) == 0f32 {
+            Ok(SceneIterator {
+                scene, size,
+                stopped: 0,
+            })
+        }
+        else {
+            Err(String::from("`size` must be a square of some number"))
         }
     }
 }
 
 impl<'a> Iterator for SceneIterator<'a> {
-    type Item = Vec<Ray>;
+    type Item = SceneChunk;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.stopped >= self.scene.screen_width * self.scene.screen_height {
@@ -128,20 +157,42 @@ impl<'a> Iterator for SceneIterator<'a> {
             rays.push(ray);
             if rays.len() >= self.size {
                 self.stopped = pixel_id + 1;
-                return Some(rays);
+                return Some(SceneChunk::from_vec(rays, self.size));
             }
 
         }
-        Some(rays)
+        Some(SceneChunk::from_vec(rays, self.size))
 
     }
 }
 
-struct SceneChunk(Vec<Ray>);
+pub struct SceneChunk {
+    data: Vec<Ray>,
+    size: usize,
+}
 
 impl SceneChunk {
+    pub fn from_vec(data: Vec<Ray>, size: usize) -> Self {
+        SceneChunk {
+            data, size
+        }
+    }
     pub fn get_dimensions(&self) -> (u32, u32) {
-        let 
+        if self.size == self.data.len() {
+            let sqrt = (self.size as f32).sqrt() as u32;
+            (sqrt, sqrt)
+        } else {
+            (self.size as u32, 1)
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+
+impl AsRef<Vec<Ray>> for SceneChunk {
+    fn as_ref(&self) -> &Vec<Ray> {
+        &self.data
     }
 }
 
@@ -153,8 +204,8 @@ mod tests {
     #[test]
     fn test_scene_iterator() {
         let scene = Scene { lu: Default::default(), width: 1., height: 1., screen_width: 10, screen_height: 10, eye: Default::default() };
-        let iterator = SceneIterator::new(&scene, 10);
+        let iterator = SceneIterator::new(&scene, 25).unwrap();
 
-        assert_eq!(iterator.into_iter().collect::<Vec<_>>().len(), 10);
+        assert_eq!(iterator.into_iter().collect::<Vec<_>>().len(), 4);
     }
 }
