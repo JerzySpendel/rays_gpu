@@ -4,14 +4,18 @@ mod ray;
 mod utils;
 mod scene;
 mod random;
+mod animation;
 
 use std::borrow::Cow;
 use wgpu::{self, ComputePipeline};
 use tokio;
 use bytemuck;
 use wgpu::util::DeviceExt;
+use ultraviolet::Vec3;
+
 use ray::Ray;
 use scene::{Scene, SceneIterator, SceneChunk};
+use animation::Animation;
 
 use std::sync::Arc;
 
@@ -48,13 +52,26 @@ async fn main() -> Result<(), String> {
         entry_point: "main",
     }));
 
-    let scene = Arc::new(Scene::default());
-    let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
-    let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
-    tokio::spawn(pixel_sender(pixels_stream_sender, scene.clone()));
-    tokio::spawn(compute_pixels(pixels_stream_receiver, ray_sender, device.clone(), compute_pipeline.clone(), queue.clone(), scene.clone()));
+    let animation = Animation::new(
+        Vec3::new(0., 0., 1.),
+        Vec3::new(0., 25., 1.),
+        250,
+        device.clone(),
+        compute_pipeline.clone(),
+        queue.clone(),
+    );
 
-    tokio::spawn(scene.collect_pixels(ray_receiver)).await;
+    for frame in 250..=250 {
+        let scene = Arc::new(animation.scene_at(frame as u32));
+        let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
+        let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
+        tokio::spawn(pixel_sender(pixels_stream_sender, scene.clone()));
+        tokio::spawn(compute_pixels(pixels_stream_receiver, ray_sender, device.clone(), compute_pipeline.clone(), queue.clone(), scene.clone()));
+
+        let filename = format!("output{}.jpg", frame);
+        tokio::spawn(scene.collect_pixels(filename, ray_receiver)).await;
+    }
+
     Ok(())
 }
 

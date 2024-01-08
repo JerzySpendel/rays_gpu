@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = "0.16.2"
+wgpu = "0.16"
 image = "0.24.6"
 tokio = {version = "1", features = ["full"]}
 bytemuck = "1.13.1"

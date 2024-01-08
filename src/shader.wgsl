@@ -95,8 +95,8 @@ fn prng (p: f32) -> f32 {
 // }
 
 fn has_hit(ray: Ray) -> vec2<f32> {
-    let init_max_t = f32(1000000000);
-    let min_t: f32 = 0.00001;
+    let init_max_t = f32(100000000);
+    let min_t: f32 = 0.00000001;
     var max_t: f32 = init_max_t;
     var ball_index: i32;
 
@@ -104,23 +104,21 @@ fn has_hit(ray: Ray) -> vec2<f32> {
         let ball = balls[i];
         let oc: vec3<f32> = ray.orig - ball.center;
         let a = dot(ray.dir, ray.dir);
-        let b = 2.0 * dot(oc, ray.dir);
+        let half_b = dot(oc, ray.dir);
         let c = dot(oc, oc) - ball.radius * ball.radius;
-        let discr: f32 = b*b - 4.0 * a * c;
+        let discr: f32 = half_b * half_b - a * c;
         if discr > 0.0 {
-            let solution = (-b - sqrt(discr)) / (2.0 * a);
+            var solution = (-half_b - sqrt(discr)) / a;
             if solution > min_t && solution < max_t {
                 max_t = solution;
                 ball_index = i;
             }
-            else {
-                let solution = (-b + sqrt(discr)) / (2.0 * a);
-                if solution > min_t && solution < max_t {
-                    max_t = solution;
-                    ball_index = i;
-                }
-            }
 
+            solution = (-half_b + sqrt(discr)) / a;
+            if solution > min_t && solution < max_t {
+                max_t = solution;
+                ball_index = i;
+            }
         }
     }
     if max_t == init_max_t {
@@ -145,19 +143,19 @@ fn random_vec3(seed: f32, N: vec3<f32>) -> vec3<f32> {
         }
     }
     
-    let random_vector = normalize(unit + N / 2.0);
+    let random_vector = normalize(unit);
     if dot(random_vector, N) > 0.0 {
         return random_vector;
     }
     else {
-        return -random_vector;
+        return random_vector;
     }
 }
 
 
 fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
     var output_color: vec3<f32> = vec3<f32>(1.);
-    var depth: i32 = 15;
+    var depth: i32 = 5;
 
     var current_ray = ray;
     while depth > 0 {
@@ -167,7 +165,7 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
         if t > 0.0 {
             let ball_index = u32(has_hit_response.x);
             let ball = balls[ball_index];
-            let hit_point = current_ray.orig + current_ray.dir * t;
+            let hit_point = current_ray.orig + current_ray.dir * (t - 0.000000001);
             let N = normalize(hit_point - ball.center);
 
             var new_target: vec3<f32>;
@@ -175,8 +173,8 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
                 new_target = normalize(hit_point + N + random_vec3(seed.x, N));
             }
             else {
-                let N_offset = normalize(50.0 * N + random_vec3(seed.x, N));
-                // let N_offset = N;
+                // let N_offset = normalize(50.0 * N + random_vec3(seed.x, N));
+                let N_offset = N;
                 new_target = current_ray.dir - 2.0*dot(N_offset, current_ray.dir) * N_offset;
             }
             var new_ray: Ray;
