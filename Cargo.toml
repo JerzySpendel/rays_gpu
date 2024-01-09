@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = "0.16"
-image = "0.24.6"
+wgpu = "0.18"
+image = "0.24.7"
 tokio = {version = "1", features = ["full"]}
-bytemuck = "1.13.1"
+bytemuck = "1.14.0"
 futures-intrusive = "0.5.0"
 nalgebra = "*"
 ultraviolet = { version = "0.9", features = [ "f64", "int", "bytemuck" ] }
