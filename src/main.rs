@@ -53,15 +53,15 @@ async fn main() -> Result<(), String> {
     }));
 
     let animation = Animation::new(
-        Vec3::new(0., 0., 1.),
-        Vec3::new(0., 25., 1.),
-        250,
+        Vec3::new(0., 5., 1.),
+        Vec3::new(5., 5., 1.),
+        150,
         device.clone(),
         compute_pipeline.clone(),
         queue.clone(),
     );
 
-    for frame in 250..=250 {
+    for frame in 1..=250 {
         let scene = Arc::new(animation.scene_at(frame as u32));
         let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
         let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
@@ -79,7 +79,6 @@ async fn pixel_sender(pixel_stream: tokio::sync::mpsc::Sender<SceneChunk>, scene
     for chunk in SceneIterator::new(&scene, 250000).unwrap() {
         pixel_stream.send(chunk).await;
     }
-
 }
 
 async fn compute_pixels(

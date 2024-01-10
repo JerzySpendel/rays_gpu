@@ -96,7 +96,7 @@ fn prng (p: f32) -> f32 {
 
 fn has_hit(ray: Ray) -> vec2<f32> {
     let init_max_t = f32(100000000);
-    let min_t: f32 = 0.00000001;
+    let min_t: f32 = 0.001;
     var max_t: f32 = init_max_t;
     var ball_index: i32;
 
@@ -124,6 +124,7 @@ fn has_hit(ray: Ray) -> vec2<f32> {
     if max_t == init_max_t {
         return vec2<f32>(-1.0, -1.0);
     }
+
     else {
         return vec2<f32>(f32(ball_index), max_t);
     }
@@ -131,11 +132,11 @@ fn has_hit(ray: Ray) -> vec2<f32> {
 
 fn random_vec3(seed: f32, N: vec3<f32>) -> vec3<f32> {
     var unit: vec3<f32>;
-    var seed = seed;
+    var current_seed = seed;
     loop { 
-        unit = vec3<f32>(prng(seed), prng(seed + 1.), prng(seed + 2.));
+        unit = vec3<f32>(prng(current_seed), prng(current_seed + 1.), prng(current_seed + 2.));
         if dot(unit, unit) >= 1. {
-            seed += 3.0;
+            current_seed += 3.0;
             continue;
         }
         else {
@@ -148,7 +149,7 @@ fn random_vec3(seed: f32, N: vec3<f32>) -> vec3<f32> {
         return random_vector;
     }
     else {
-        return random_vector;
+        return -random_vector;
     }
 }
 
@@ -165,12 +166,12 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
         if t > 0.0 {
             let ball_index = u32(has_hit_response.x);
             let ball = balls[ball_index];
-            let hit_point = current_ray.orig + current_ray.dir * (t - 0.000000001);
+            let hit_point = current_ray.orig + current_ray.dir * t;
             let N = normalize(hit_point - ball.center);
 
             var new_target: vec3<f32>;
             if ball.material == 0u {
-                new_target = normalize(hit_point + N + random_vec3(seed.x, N));
+                new_target = hit_point + N + random_vec3(seed.x, N);
             }
             else {
                 // let N_offset = normalize(50.0 * N + random_vec3(seed.x, N));
@@ -180,8 +181,9 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
             var new_ray: Ray;
             new_ray.screen_x = ray.screen_x;
             new_ray.screen_y = ray.screen_y;
-            new_ray.dir = new_target - hit_point;
+            new_ray.dir = normalize(new_target - hit_point);
             new_ray.orig = hit_point;
+
             current_ray = new_ray;
 
             output_color *= 0.5;
@@ -192,6 +194,9 @@ fn ray_color(ray: Ray, seed: vec4<f32>) -> vec3<f32> {
             output_color *= (1.0-coeff)*vec3<f32>(1.0, 1.0, 1.0) + coeff*vec3<f32>(0.5, 0.7, 1.0);
             return output_color;
         }
+        // else if t < 0.0 {
+        //     return vec3<f32>(1., 0., 0.);
+        // }
 
         depth -= 1;
     }

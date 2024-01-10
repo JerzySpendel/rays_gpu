@@ -92,7 +92,7 @@ impl Scene {
                 material: 0,
                 _padding: Default::default(),
             }, 
-            // Ball { center: Vec3::new(0.5, 0.0, -0.7) , radius: 0.5, material: 1, _padding: Default::default()}, 
+            Ball { center: Vec3::new(0.5, 0.0, -0.7) , radius: 0.5, material: 0, _padding: Default::default()}, 
             ball
         ];
 
@@ -151,7 +151,7 @@ impl<'a> Iterator for SceneIterator<'a> {
         let vup = Vec3::new(0., 1., 0.);
         let look_from = self.scene.eye;
         let look_at = Vec3::new(0., 0., 0.);
-        let fov = 90.0f32;
+        let fov = 60.0f32;
         let focal_length = (look_at - look_from).dot(look_at - look_from).sqrt();
         let h = (fov.to_radians() / 2.).tan();
 
@@ -164,12 +164,12 @@ impl<'a> Iterator for SceneIterator<'a> {
         let v = w.cross(u);
 
         let viewport_u = viewport_width * u;
-        let viewport_v = viewport_height * v;
+        let viewport_v = viewport_height * (-v);
 
         let pixel_delta_u = viewport_u / (self.scene.screen_width as f32);
         let pixel_delta_v = viewport_v / (self.scene.screen_height as f32);
 
-        let viewport_upper_left_corner = camera_center - focal_length * w - viewport_u / 2. + viewport_v / 2.;
+        let viewport_upper_left_corner = camera_center - focal_length * w - viewport_u / 2. - viewport_v / 2.;
         let pixel00_loc = viewport_upper_left_corner;
 
         let mut rays: Vec<Ray> = Vec::with_capacity(self.size);
@@ -179,7 +179,7 @@ impl<'a> Iterator for SceneIterator<'a> {
             let screen_x = pixel_id - self.scene.screen_width * screen_y;
             let (screen_x, screen_y) = (screen_x as f32, screen_y as f32);
 
-            let pixel_center = pixel00_loc + (pixel_delta_u * screen_x) - (pixel_delta_v * screen_y);
+            let pixel_center = pixel00_loc + (pixel_delta_u * screen_x) + (pixel_delta_v * screen_y);
             let ray = Ray::new(
                 self.scene.eye.clone(),
                 (pixel_center - camera_center).normalized(),
