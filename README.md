@@ -1,0 +1,1 @@
+![Example render](render.gif)
