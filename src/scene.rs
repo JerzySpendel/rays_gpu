@@ -31,6 +31,9 @@ pub struct SceneIterator<'a> {
     scene: &'a Scene,
     size: usize,
     stopped: u32,
+    pub pixel00_loc: Vec3,
+    pub pixel_delta_u: Vec3,
+    pub pixel_delta_v: Vec3,
 }
 
 
@@ -50,6 +53,28 @@ impl Scene {
         let mut scene = Self::default();
         scene.eye = eye;
         return scene;
+    }
+
+    pub fn sampling_uniform(&self, device: Arc<wgpu::Device>) -> (wgpu::Buffer, wgpu::Buffer) {
+        let self_iter = SceneIterator::new(self, 10000).unwrap();
+
+        let pixel_delta_u_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Uniform metadata buffer"),
+                contents: bytemuck::cast_slice(&[self_iter.pixel_delta_u]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
+        let pixel_delta_v_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Uniform metadata buffer"),
+                contents: bytemuck::cast_slice(&[self_iter.pixel_delta_v]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
+        (pixel_delta_u_buffer, pixel_delta_v_buffer)
     }
     
     pub async fn collect_pixels(self: Arc<Self>, filename: String, mut pixels_receiver: tokio::sync::mpsc::Receiver<Vec<Ray>>){
@@ -89,7 +114,7 @@ impl Scene {
             Ball {
                 center: Vec3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
-                material: 0,
+                material: 1,
                 _padding: Default::default(),
             }, 
             Ball { center: Vec3::new(0.5, 0.0, -0.7) , radius: 0.5, material: 0, _padding: Default::default()}, 
@@ -108,9 +133,9 @@ impl Scene {
 
     pub fn get_triangles_bg(self: Arc<Self>, cp: Arc<wgpu::ComputePipeline>, device: Arc<wgpu::Device>) -> wgpu::Buffer {
         let triangle = Triangle::new(
-            Vec3::new(0.5, 0.5, -1.0),
-            Vec3::new(0.25, 0.25, -1.0),
-            Vec3::new(0.75, 0.25, -1.0),
+            Vec3::new(0.5, 1.0, -1.0),
+            Vec3::new(0.25, 0.75, -1.0),
+            Vec3::new(0.75, 0.75, -1.0),
         );
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -128,9 +153,33 @@ impl<'a> SceneIterator<'a> {
     pub fn new(scene: &'a Scene, size: usize) -> Result<Self, String> {
         let sqrt = (size as f32).sqrt();
 
+        let vup = Vec3::new(0., 1., 0.);
+        let look_from = scene.eye;
+        let look_at = Vec3::new(0., 0., 0.);
+        let fov = 30.0f32;
+        let focal_length = (look_at - look_from).dot(look_at - look_from).sqrt();
+        let h = (fov.to_radians() / 2.).tan();
+
+        let viewport_height = 2. * h * focal_length;
+        let viewport_width = viewport_height * (scene.screen_width as f32 / scene.screen_height as f32);
+        let camera_center = scene.eye;
+
+        let w = (look_from - look_at).normalized();
+        let u = vup.cross(w).normalized();
+        let v = w.cross(u);
+
+        let viewport_u = viewport_width * u;
+        let viewport_v = viewport_height * (-v);
+
+        let pixel_delta_u = viewport_u / (scene.screen_width as f32);
+        let pixel_delta_v = viewport_v / (scene.screen_height as f32);
+
+        let viewport_upper_left_corner = camera_center - focal_length * w - viewport_u / 2. - viewport_v / 2.;
+        let pixel00_loc = viewport_upper_left_corner;
+
         if (sqrt - sqrt.round()) == 0f32 {
             Ok(SceneIterator {
-                scene, size,
+                scene, size, pixel00_loc, pixel_delta_u, pixel_delta_v,
                 stopped: 0,
             })
         }
@@ -147,31 +196,7 @@ impl<'a> Iterator for SceneIterator<'a> {
         if self.stopped >= self.scene.screen_width * self.scene.screen_height {
             return None
         }
-
-        let vup = Vec3::new(0., 1., 0.);
-        let look_from = self.scene.eye;
-        let look_at = Vec3::new(0., 0., 0.);
-        let fov = 60.0f32;
-        let focal_length = (look_at - look_from).dot(look_at - look_from).sqrt();
-        let h = (fov.to_radians() / 2.).tan();
-
-        let viewport_height = 2. * h * focal_length;
-        let viewport_width = viewport_height * (self.scene.screen_width as f32 / self.scene.screen_height as f32);
-        let camera_center = self.scene.eye;
-
-        let w = (look_from - look_at).normalized();
-        let u = vup.cross(w).normalized();
-        let v = w.cross(u);
-
-        let viewport_u = viewport_width * u;
-        let viewport_v = viewport_height * (-v);
-
-        let pixel_delta_u = viewport_u / (self.scene.screen_width as f32);
-        let pixel_delta_v = viewport_v / (self.scene.screen_height as f32);
-
-        let viewport_upper_left_corner = camera_center - focal_length * w - viewport_u / 2. - viewport_v / 2.;
-        let pixel00_loc = viewport_upper_left_corner;
-
+        
         let mut rays: Vec<Ray> = Vec::with_capacity(self.size);
         for pixel_id in self.stopped..(self.scene.screen_width * self.scene.screen_height) {
             let screen_y = pixel_id.div_floor(self.scene.screen_width);
@@ -179,10 +204,10 @@ impl<'a> Iterator for SceneIterator<'a> {
             let screen_x = pixel_id - self.scene.screen_width * screen_y;
             let (screen_x, screen_y) = (screen_x as f32, screen_y as f32);
 
-            let pixel_center = pixel00_loc + (pixel_delta_u * screen_x) + (pixel_delta_v * screen_y);
+            let pixel_center = self.pixel00_loc + (self.pixel_delta_u * screen_x) + (self.pixel_delta_v * screen_y);
             let ray = Ray::new(
                 self.scene.eye.clone(),
-                (pixel_center - camera_center).normalized(),
+                pixel_center - self.scene.eye,
                 None,
                 screen_x as u32,
                 screen_y as u32,

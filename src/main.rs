@@ -53,15 +53,17 @@ async fn main() -> Result<(), String> {
     }));
 
     let animation = Animation::new(
-        Vec3::new(0., 5., 1.),
-        Vec3::new(5., 5., 1.),
-        150,
+        Vec3::new(4., 1., 5.0),
+        Vec3::new(1., 1., 5.),
+        250,
         device.clone(),
         compute_pipeline.clone(),
         queue.clone(),
     );
 
-    for frame in 1..=250 {
+    let t = std::time::Instant::now();
+
+    for frame in 250..=250 {
         let scene = Arc::new(animation.scene_at(frame as u32));
         let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
         let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
@@ -71,6 +73,8 @@ async fn main() -> Result<(), String> {
         let filename = format!("output{}.jpg", frame);
         tokio::spawn(scene.collect_pixels(filename, ray_receiver)).await;
     }
+
+    println!("{}s", (std::time::Instant::now() - t).as_secs_f32());
 
     Ok(())
 }
@@ -105,6 +109,8 @@ async fn compute_pixels(
         });
 
         let balls_buffer = scene.clone().get_balls_bg(cp.clone(), device.clone());
+        let (pixel_delta_u_buffer, pixel_delta_v_buffer) = scene.sampling_uniform(device.clone());
+
         let triangles_buffer = scene.get_triangles_bg(cp.clone(), device.clone());
         let bind_group_layout: wgpu::BindGroupLayout = cp.get_bind_group_layout(0);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -118,7 +124,20 @@ async fn compute_pixels(
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: balls_buffer.as_entire_binding(),
-                }]
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: pixel_delta_u_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: pixel_delta_v_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: triangles_buffer.as_entire_binding(),
+                }
+                ]
                 // wgpu::BindGroupEntry {
                 //     binding: 2,
                 //     resource: triangles_buffer.as_entire_binding(),
