@@ -57,7 +57,7 @@ fn prng (p: f32) -> f32 {
   return f32(pcg(u32(p))) / f32(0xffffffffu);
 }
 
-fn triangle_hit(ray: Ray, triangle_id: u32) -> f32 {
+fn triangle_hit(ray: Ray, triangle_id: u32) -> vec4<f32> {
     let kEpsilon = 0.0001;
     let triangle: Triangle = triangles[triangle_id];
     let v0v1 = triangle.v1 - triangle.v0;
@@ -65,15 +65,16 @@ fn triangle_hit(ray: Ray, triangle_id: u32) -> f32 {
     let N = cross(v0v1, v0v2);
     let area2 = length(N);
 
+    let invalid = vec4<f32>(-1.0);
     if abs(dot(N, ray.dir)) < kEpsilon {
-        return -1.0;
+        return invalid;
     }
 
     let d = -dot(N, triangle.v0);
-    let t = -(dot(N, ray.orig) + d)/ dot(N, ray.dir);
+    let t = -(dot(N, ray.orig) + d) / dot(N, ray.dir);
 
     if t < 0.0 {
-        return -1.0;
+        return invalid;
     }
 
     let P = ray.orig + ray.dir * t;
@@ -82,24 +83,24 @@ fn triangle_hit(ray: Ray, triangle_id: u32) -> f32 {
     let vp0 = P - triangle.v0;
     var C: vec3<f32> = cross(edge0, vp0);
     if dot(N, C) < 0.0 {
-        return -1.0;
+        return invalid;
     }
 
     let edge1 = triangle.v2 - triangle.v1;
     let vp1 = P - triangle.v1;
     C = cross(edge1, vp1);
     if dot(N, C) < 0.0 {
-        return -1.0;
+        return invalid;
     }
 
     let edge2 = triangle.v0 - triangle.v2;
     let vp2 = P - triangle.v2;
     C = cross(edge2, vp2);
     if dot(N, C) < 0.0 {
-        return -1.0;
+        return invalid;
     }
 
-    return t;
+    return vec4<f32>(t, N.x, N.y, N.z);
 }
 
 fn has_hit(ray: Ray) -> array<vec3<f32>, 2> {
@@ -110,6 +111,7 @@ fn has_hit(ray: Ray) -> array<vec3<f32>, 2> {
 
     var response: vec3<f32> = vec3<f32>(init_max_t, -1., -1.); // vec3<f32>(t, material, :unused_variable_space:)
     var N: vec3<f32>;
+    let ok = arrayLength(&balls);
 
     for (var i: i32 = 0; i < i32(arrayLength(&balls)); i = i + 1){
         let ball = balls[i];
@@ -139,22 +141,16 @@ fn has_hit(ray: Ray) -> array<vec3<f32>, 2> {
 
     for(var i: i32 = 0; i < i32(arrayLength(&triangles)); i = i + 1){ 
         let triangle_index = u32(i);
-        let t = triangle_hit(ray, triangle_index);
-        let N = normalize(vec3<f32>(0.12, 0.23, 0.34));
-        if t != -1.0 {
+        let triangle_hit: vec4<f32> = triangle_hit(ray, triangle_index);
+        let t = triangle_hit.x;
+        let N = vec3<f32>(triangle_hit.y, triangle_hit.z, triangle_hit.w);
+        if all(triangle_hit != vec4<f32>(-1.0)) {
             if t > min_t && t < response.x {
                 response.x = t;
                 response.y = 0f;
             }
         }
     }
-    // if max_t == init_max_t {
-    //     return vec2<f32>(-1.0, -1.0);
-    // }
-
-    // else {
-    //     return vec2<f32>(f32(ball_index), max_t);
-    // }
     if response.x == init_max_t {
         response.x = -1.;
     }
@@ -259,12 +255,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
         ray.dir = RAY_ORIGIN_DIR + pixel_delta_u * (prng(seed.x * f32(sample_index)) - 1f) / 2f + pixel_delta_v * (prng(seed.y * f32(sample_index)) - 1f) / 2f;
         output_color += ray_color(ray, seed * f32(sample_index)) / f32(SAMPLES);
     }
-
-    // let color1 = ray_color(ray, seed * 12f);
-    // ray.dir = ray.dir + pixel_delta_u / 4. + pixel_delta_v / 4.;
-    // let color2 = ray_color(ray, seed + 10f);
-    // ray.dir = ray.dir - pixel_delta_u / 4. - pixel_delta_v / 4.;
-    // let color3 = ray_color(ray, seed + 20f);
 
     v_indices[ray_index].color = output_color;
     let s = triangles[0];

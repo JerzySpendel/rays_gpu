@@ -14,3 +14,4 @@ futures-intrusive = "0.5.0"
 nalgebra = "*"
 ultraviolet = { version = "0.9", features = [ "f64", "int", "bytemuck" ] }
 rand = "0.8.5"
+tobj = "4.0.1"

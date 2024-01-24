@@ -1,4 +1,3 @@
-
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -40,8 +39,8 @@ pub struct SceneIterator<'a> {
 impl Default for Scene {
     fn default() -> Self {
         Scene {
-            screen_width: 5000,
-            screen_height: 5000,
+            screen_width: 1000,
+            screen_height: 1000,
             eye: Vec3::new(0f32, 2f32, 1f32)
         }
     }
@@ -110,15 +109,15 @@ impl Scene {
             _padding: Default::default(),
         };
 
-        let balls = vec![
+        let balls: Vec<Ball> = vec![
             Ball {
                 center: Vec3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
                 material: 1,
                 _padding: Default::default(),
             }, 
-            Ball { center: Vec3::new(0.5, 0.0, -0.7) , radius: 0.5, material: 0, _padding: Default::default()}, 
-            ball
+            // Ball { center: Vec3::new(0.5, 0.0, -0.7) , radius: 0.5, material: 0, _padding: Default::default()}, 
+            // ball
         ];
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -132,15 +131,35 @@ impl Scene {
     }
 
     pub fn get_triangles_bg(self: Arc<Self>, cp: Arc<wgpu::ComputePipeline>, device: Arc<wgpu::Device>) -> wgpu::Buffer {
-        let triangle = Triangle::new(
-            Vec3::new(0.5, 1.0, -1.0),
-            Vec3::new(0.25, 0.75, -1.0),
-            Vec3::new(0.75, 0.75, -1.0),
-        );
+        let mut loading_options = tobj::LoadOptions::default();
+        loading_options.triangulate = true;
+
+        let model = tobj::load_obj("monkey.obj", &loading_options).unwrap().0;
+        let model = model.get(0).unwrap();
+
+        let mut vertices = Vec::with_capacity(1000);
+        let mut triangles = Vec::with_capacity(1000);
+
+
+        for [x, y, z] in model.mesh.positions.array_chunks() {
+            vertices.push(
+                Vec3::new(x.clone(), y.clone(), z.clone())
+            )
+        }
+
+        for [v1, v2, v3] in model.mesh.indices.array_chunks() {
+            triangles.push(
+                Triangle::new(
+                    vertices[v1.clone() as usize], 
+                    vertices[v2.clone() as usize],
+                    vertices[v3.clone() as usize]
+            )
+        )
+        }
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Buffer with triangles"),
-            contents: bytemuck::cast_slice(&[triangle]),
+            contents: bytemuck::cast_slice(&triangles[0..200]),
             usage: wgpu::BufferUsages::STORAGE,
         });
 

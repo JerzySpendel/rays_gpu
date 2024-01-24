@@ -1,4 +1,6 @@
 #![feature(int_roundings)]
+#![feature(array_chunks)]
+#![feature(iter_array_chunks)]
 
 mod ray;
 mod utils;
@@ -9,6 +11,7 @@ mod animation;
 use std::borrow::Cow;
 use wgpu::{self, ComputePipeline};
 use tokio;
+use tobj;
 use bytemuck;
 use wgpu::util::DeviceExt;
 use ultraviolet::Vec3;
@@ -54,7 +57,7 @@ async fn main() -> Result<(), String> {
 
     let animation = Animation::new(
         Vec3::new(4., 1., 5.0),
-        Vec3::new(1., 1., 5.),
+        Vec3::new(1., 1., 20.),
         250,
         device.clone(),
         compute_pipeline.clone(),
@@ -74,12 +77,17 @@ async fn main() -> Result<(), String> {
         tokio::spawn(scene.collect_pixels(filename, ray_receiver)).await;
     }
 
-    println!("{}s", (std::time::Instant::now() - t).as_secs_f32());
+    // println!("{}s", (std::time::Instant::now() - t).as_secs_f32());
+    // let wut = tobj::load_obj("skull.obj", &tobj::LoadOptions::default());
+    // let wut = wut.unwrap();
+    // let model = wut.0.get(0).unwrap();
+
 
     Ok(())
 }
 
 async fn pixel_sender(pixel_stream: tokio::sync::mpsc::Sender<SceneChunk>, scene: Arc<Scene>) {
+    println!("{}", SceneIterator::new(&scene, 250000).unwrap().into_iter().count());
     for chunk in SceneIterator::new(&scene, 250000).unwrap() {
         pixel_stream.send(chunk).await;
     }
