@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = "0.18"
-image = "0.24.7"
+wgpu = "23.0.1"
+image = "0.24.5"
 tokio = {version = "1", features = ["full"]}
 bytemuck = "1.14.0"
 futures-intrusive = "0.5.0"
@@ -15,3 +15,7 @@ nalgebra = "*"
 ultraviolet = { version = "0.9", features = [ "f64", "int", "bytemuck" ] }
 rand = "0.8.5"
 tobj = "4.0.1"
+
+# [[bin]]
+# name = "something"
+# path = "src/something.rs"

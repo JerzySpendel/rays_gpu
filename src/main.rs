@@ -36,8 +36,9 @@ async fn main() -> Result<(), String> {
     }).await.unwrap();
     let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        features: wgpu::Features::default(),
-        limits: wgpu::Limits::default(),
+        required_features: wgpu::Features::default(),
+        required_limits: wgpu::Limits::downlevel_defaults(),
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
     }, None).await.unwrap();
     let device = Arc::new(device);
     let queue = Arc::new(queue);
@@ -48,11 +49,53 @@ async fn main() -> Result<(), String> {
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl")))
     });
 
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Main bind group layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage {
+                        read_only: true,
+                    },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let texture_bg_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Random texture bg layout"),
+        entries: &[ 
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Texture { 
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true }, 
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false 
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Compute Pipeline Layout"),
+        bind_group_layouts: &[&bind_group_layout, &texture_bg_layout],
+        push_constant_ranges: &[],
+    });
+
     let compute_pipeline = Arc::new(device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: None,
-        layout: None,
+        label: Some("Compute Pipeline"),
+        layout: Some(&pipeline_layout),
         module: &cs_module,
-        entry_point: "main",
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
     }));
 
     let animation = Animation::new(
@@ -64,23 +107,15 @@ async fn main() -> Result<(), String> {
         queue.clone(),
     );
 
-    let t = std::time::Instant::now();
 
-    for frame in 250..=250 {
-        let scene = Arc::new(animation.scene_at(frame as u32));
-        let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
-        let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
-        tokio::spawn(pixel_sender(pixels_stream_sender, scene.clone()));
-        tokio::spawn(compute_pixels(pixels_stream_receiver, ray_sender, device.clone(), compute_pipeline.clone(), queue.clone(), scene.clone()));
+    let scene = Arc::new(animation.scene_at(10));
+    let (pixels_stream_sender, pixels_stream_receiver) = tokio::sync::mpsc::channel(20);
+    let (ray_sender, ray_receiver) = tokio::sync::mpsc::channel(20);
+    tokio::spawn(pixel_sender(pixels_stream_sender, scene.clone()));
+    tokio::spawn(compute_pixels(pixels_stream_receiver, ray_sender, device.clone(), compute_pipeline.clone(), queue.clone(), scene.clone()));
 
-        let filename = format!("output{}.jpg", frame);
-        tokio::spawn(scene.collect_pixels(filename, ray_receiver)).await;
-    }
-
-    // println!("{}s", (std::time::Instant::now() - t).as_secs_f32());
-    // let wut = tobj::load_obj("skull.obj", &tobj::LoadOptions::default());
-    // let wut = wut.unwrap();
-    // let model = wut.0.get(0).unwrap();
+    let filename = format!("output{}.jpg", 10);
+    tokio::spawn(scene.collect_pixels(filename, ray_receiver)).await;
 
 
     Ok(())

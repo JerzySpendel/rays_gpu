@@ -39,8 +39,8 @@ pub struct SceneIterator<'a> {
 impl Default for Scene {
     fn default() -> Self {
         Scene {
-            screen_width: 1000,
-            screen_height: 1000,
+            screen_width: 2000,
+            screen_height: 2000,
             eye: Vec3::new(0f32, 2f32, 1f32)
         }
     }
@@ -159,7 +159,7 @@ impl Scene {
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Buffer with triangles"),
-            contents: bytemuck::cast_slice(&triangles[0..200]),
+            contents: bytemuck::cast_slice(&triangles),
             usage: wgpu::BufferUsages::STORAGE,
         });
 
