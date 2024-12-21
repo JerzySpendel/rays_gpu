@@ -134,7 +134,7 @@ impl Scene {
         let mut loading_options = tobj::LoadOptions::default();
         loading_options.triangulate = true;
 
-        let model = tobj::load_obj("monkey.obj", &loading_options).unwrap().0;
+        let model = tobj::load_obj("monkey2.obj", &loading_options).unwrap().0;
         let model = model.get(0).unwrap();
 
         let mut vertices = Vec::with_capacity(1000);

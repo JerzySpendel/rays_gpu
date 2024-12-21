@@ -1,7 +1,7 @@
-use std::{sync::Arc, io::Read};
+use std::sync::Arc;
 
 use image::GenericImageView;
-use rand::{self, Rng, random};
+use rand::{self, Rng};
 use wgpu;
 
 pub fn get_random_image(width: u32, height: u32) -> image::DynamicImage {
@@ -11,7 +11,7 @@ pub fn get_random_image(width: u32, height: u32) -> image::DynamicImage {
     random_floats.resize(size as usize, 0);
     rng.fill(random_floats.as_mut_slice());
 
-    let mut noise_image = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_vec(width, height, random_floats).unwrap();
+    let noise_image = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_vec(width, height, random_floats).unwrap();
     image::DynamicImage::ImageRgba8(noise_image)
 }
 
