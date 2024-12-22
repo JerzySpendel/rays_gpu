@@ -249,7 +249,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
     let delta_v: vec3<f32> = pixel_delta_v;
 
     var output_color = vec3<f32>(0.);
-    let SAMPLES = 1;
+    let SAMPLES = 4;
 
     for(var sample_index: i32 = 1; sample_index < SAMPLES + 1; sample_index++) {
         ray.dir = RAY_ORIGIN_DIR + pixel_delta_u * (prng(seed.x * f32(sample_index)) - 1f) / 2f + pixel_delta_v * (prng(seed.y * f32(sample_index)) - 1f) / 2f;

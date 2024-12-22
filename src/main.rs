@@ -157,7 +157,7 @@ async fn main() -> Result<(), String> {
     tokio::spawn(pixel_sender(pixels_stream_sender, scene.clone()));
     tokio::spawn(compute_pixels(pixels_stream_receiver, ray_sender, device.clone(), compute_pipeline.clone(), queue.clone(), scene.clone()));
 
-    let filename = format!("output{}.jpg", 10);
+    let filename = format!("output{}.jpg", 40);
     tokio::spawn(scene.collect_pixels(filename, ray_receiver)).await.unwrap();
 
 

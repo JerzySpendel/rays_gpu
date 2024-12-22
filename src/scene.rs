@@ -111,8 +111,8 @@ impl Scene {
 
         let balls: Vec<Ball> = vec![
             Ball {
-                center: Vec3::new(0.0, -100.5, -1.0),
-                radius: 100.0,
+                center: Vec3::new(0.0, -10.5, -1.0),
+                radius: 10.0,
                 material: 1,
                 _padding: Default::default(),
             }, 
